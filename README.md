@@ -39,7 +39,7 @@ Later, I will explain how users who receive tokens can verify the provenance of 
 
 # Token transfers
 
-Suppose a user called Alice controlls the pubkey 1ef...50a which has already received 100 tokens from an issuance transaction or another transfer transaction. Alice wants to transfer 50 tokens to another pubkey. She can create a transfer message, hash it, sign the hash, and add her key:sig pair to the sidechain either via the oracle or via an op_return. A transfer message must have this format: "pubkey 4a1...990 received 50 tokens from pubkey 1ef...50a, the token id is 5d2...9a4." The sender's pubkey must sign transfer transactions. Clients only see them as valid if the sender sent tokens they previously received either via issuance transactions or through other transfers.
+Suppose a user called Alice controls the pubkey 1ef...50a which has already received 100 tokens from an issuance transaction or another transfer transaction. Alice wants to transfer 50 tokens to another pubkey. She can create a transfer message, hash it, sign the hash, and add her key:sig pair to the sidechain either via the oracle or via an op_return. A transfer message must have this format: "pubkey 4a1...990 received 50 tokens from pubkey 1ef...50a, the token id is 5d2...9a4." The sender's pubkey must sign transfer transactions. Clients only see them as valid if the sender sent tokens they previously received either via issuance transactions or through other transfers.
 
 # Proof of provenance
 
