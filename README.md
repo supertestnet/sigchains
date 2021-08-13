@@ -31,7 +31,7 @@ Sigchain nodes independently construct the sigchain by simultaneously scanning b
 
 # Immutability
 
-There may be cases where sigchain software discourages pubkey reuse by checking if a pubkey has signed multiple messages and considering only one of them valid, specifically the one whose timestamp is the earliest. In such a case, it might seem possible to trick users into accepting a message which is later invalidated when a second entry signed by the same pubkey is inserted into the sigchain by the oracle or by bitcoin's miners with a timestamp before the original. This could be especially devastating if monetary value in the form of tokens are considered sent and confirmed only if they are in a message which has the earliest timestamp for that pubkey in the sigchain.
+There may be cases where sigchain wallets discourage pubkey reuse by checking if a pubkey has signed multiple messages and considering only one of them valid, specifically the one whose timestamp is the earliest. In such a case, it might seem possible to trick users into accepting a message which is later invalidated when a second entry signed by the same pubkey is inserted into the sigchain by the oracle or by bitcoin's miners with a timestamp before the original. This could be especially devastating if monetary value in the form of tokens are considered sent and confirmed only if they are in a message which has the earliest timestamp for that pubkey in the sigchain.
 
 ## Post-dating
 
