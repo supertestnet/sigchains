@@ -1,4 +1,4 @@
-While revising the proposal, I kept running into issues regarding what exactly I need to store in the sigchain.
+While revising my sigchain proposal, I kept running into issues regarding what exactly I need to store in the sigchain.
 
 It initially seemed like all the sigchain needed was signatures, hence the name. Given a message and a pubkey, it is possible to use those -- plus a signature -- to verify that the signature was validly created from the pubkey for the given message.
 
