@@ -5,6 +5,7 @@ The first function already ensures that the first byte of the pubkey is 0.
 The signature verification function needs to take a possibly concatenated string of r_value and s_value, parse it, and construct this:
 "30" + ( "2c" || "2d" || "2e" ) + "02" ( "14" || "1500" ) + r_value + "02" + ( "14 || 1500" ) + s_value
 If none of those permutations works, the signature is invalid. It doesn't test any permutations yet.
+Now that I think about it, it might be easier to enforce a rule that the second pair of characters must be 2c to prevent permutations from being a bugaboo later.
 -->
 <head>
 <script language="JavaScript" type="text/javascript">
