@@ -2,8 +2,9 @@
 <!--
 This document contains a draft of the functions I plan to use to generate pubkeys, sign messages, and verify signatures.
 The first function already ensures that the first byte of the pubkey is 0.
-The signature verification function needs to take a possibly concatenated string of r_value and s_value, parse it, and construct this:
-"30" + ( "2c" || "2d" || "2e" ) + "02" ( "14" || "1500" ) + r_value + "02" + ( "14 || 1500" ) + s_value
+The signature generation function ensures that the r_value and s_value are always 20 bytes apiece.
+The sign message function needs to take a possibly concatenated string of r_value and s_value, parse it, and construct this:
+"302c0214" + r_value + "0214" + s_value
 If none of those permutations works, the signature is invalid. It doesn't test any permutations yet.
 Now that I think about it, it might be easier to enforce a rule that the second pair of characters must be 2c to prevent permutations from being a bugaboo later.
 -->
@@ -593,19 +594,26 @@ function generateKeys() {
     }
 }
 
-function generateSig( privkey, msg ) {
+function signMsg( privkey, msg ) {
     var curve = "secp160r1";
     var signature_algo = "RIPEMD160withECDSA";
     var sig = new KJUR.crypto.Signature({"alg": signature_algo});
     sig.init({d: privkey, curve: curve});
     sig.updateString(msg);
     var sigValueHex = sig.sign();
-    document.write("Signature : "+sigValueHex+"<br>");
+    if ( sigValueHex.substring( 2, 4 ) == "2c" ) {
+        document.write("Signature : "+sigValueHex+"<br>");
+    } else {
+        generateSig( privkey, msg );
+    }
 }
 
-function verifySig( key, msg, sigval ) {
+function verifySig( key, msg, rns ) {
     var curve = "secp160r1";
     var signature_algo = "RIPEMD160withECDSA";
+    var r_value = rns.substring( 0, 19 );
+    var s_value = rns.substring( 20 );
+    var sigval = "302c0214" + r_value + "0214" + s_value;
     var sig = new KJUR.crypto.Signature({"alg": signature_algo, "prov": "cryptojs/jsrsa"});
     sig.init({xy: key, curve: curve});
     sig.updateString(msg);
