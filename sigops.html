@@ -1,12 +1,11 @@
 <html>
 <!--
-This document contains a draft of the functions I plan to use to generate pubkeys, sign messages, and verify signatures.
-The first function already ensures that the first byte of the pubkey is 0.
+This document contains the functions I plan to use to generate keypairs, sign messages, and verify signatures.
+The first function already ensures that the first two characters of the pubkey are 00 which is important for allowing many simultaneous sigchains.
 The signature generation function ensures that the r_value and s_value are always 20 bytes apiece.
-The sign message function needs to take a possibly concatenated string of r_value and s_value, parse it, and construct this:
+The sign message function takes a concatenated string of an r_value and an s_value, parses it, and constructs this:
 "302c0214" + r_value + "0214" + s_value
-If none of those permutations works, the signature is invalid. It doesn't test any permutations yet.
-Now that I think about it, it might be easier to enforce a rule that the second pair of characters must be 2c to prevent permutations from being a bugaboo later.
+Then it checks if the signature is valid and throws an error if it is not.
 -->
 <head>
 <script language="JavaScript" type="text/javascript">
@@ -602,17 +601,20 @@ function signMsg( privkey, msg ) {
     sig.updateString(msg);
     var sigValueHex = sig.sign();
     if ( sigValueHex.substring( 2, 4 ) == "2c" ) {
-        document.write("Signature : "+sigValueHex+"<br>");
+        var r_value = sigValueHex.substring( 8, 48 );
+        var s_value = sigValueHex.substring( 52 );
+        var finalsig = r_value + s_value;
+        document.write("Signature : "+finalsig+"<br>");
     } else {
-        generateSig( privkey, msg );
+        signMsg( privkey, msg );
     }
 }
 
 function verifySig( key, msg, rns ) {
     var curve = "secp160r1";
     var signature_algo = "RIPEMD160withECDSA";
-    var r_value = rns.substring( 0, 19 );
-    var s_value = rns.substring( 20 );
+    var r_value = rns.substring( 0, 40 );
+    var s_value = rns.substring( 40 );
     var sigval = "302c0214" + r_value + "0214" + s_value;
     var sig = new KJUR.crypto.Signature({"alg": signature_algo, "prov": "cryptojs/jsrsa"});
     sig.init({xy: key, curve: curve});
@@ -625,7 +627,3 @@ function verifySig( key, msg, rns ) {
     }
 }
 </script>
-</head>  
-<body>
-</body>
-</html>
