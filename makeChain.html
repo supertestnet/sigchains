@@ -1,0 +1,115 @@
+<html>
+<!--
+TODO
+There is an issue with the chaintip which needs to be fixed. It seems to fail to update sometimes when it should update. For example, if I let it get out of date and then run checkHeight with a chaintip that is at a higher blockheight than it, it seems to update the chaintip to the height I ran checkHeight with and then not update anymore even if I rerun checkHeight().
+Write a function called storeEntry() which appends entries to a sigchain database
+Write a function called validateChain() which validates the sigchain created by storeEntry() and alerts the user if it is invalid
+Ensure that getOpReturns() not only checks the blockchain for op_returns but also checks the oracle
+Ensure that makeEntries() not only sorts op_returns alphabetically but also prefixes their timestamps, affixes an ordinal number, and sends the result to storeEntry()
+Ensure that makeEntries() ignores op_returns that don’t match the following format:
+The op_return is 80 bytes (160 characters)
+The op_return’s first character is 0
+The op_return’s 21st character (or 20th counting from 0) is 0
+I was about to say the passTransactions() function should also ignore op_returns where the last 40 bytes are not a valid signature for the key:msg pair in that entry but that is something clients should decide
+Clients should also filter out all but the *earliest* entry containing a signature which is valid for the key:msg pair in that entry -- and in cases where a block contains multiple entries with valid signatures for a given key:msg pair, they should first sort the entries alphabetically and then ignore all entries except the earliest
+-->
+<head>
+<script>
+        function makeEntries( op_returns, timestamp ) {
+                op_returns.sort();
+                op_returns.forEach( function( item ) {
+                        console.log( item + " " + timestamp );
+                });
+        }
+
+        function getOpReturn( txid, timestamp ) {
+                var xhttp = new XMLHttpRequest();
+                xhttp.onreadystatechange = function() {
+                        if (this.readyState == 4 && this.status == 200) {
+                               var transaction = xhttp.responseText;
+                               json = JSON.parse( transaction );
+                               var outputs = json[ "vout" ];
+                               var op_returns = [];
+                               outputs.forEach( function( output ) {
+                                       if ( output[ "scriptpubkey_type" ] == "op_return" ) {
+                                               op_returns.push( output[ "scriptpubkey_asm" ].split( " " )[ 2 ] );
+                                       }
+                               });
+                               makeEntries( op_returns, timestamp );
+                        }
+                };
+                xhttp.open( "GET", "https://blockstream.info/api/tx/" + txid, true );
+                xhttp.send();
+        }
+
+        function prepareEntries( blockhash, timestamp ) {
+                var transactions = "";
+                var xhttp = new XMLHttpRequest();
+                xhttp.onreadystatechange = function() {
+                        if (this.readyState == 4 && this.status == 200) {
+                                transactions = JSON.parse( xhttp.responseText );
+                                transactions.forEach( function( txid ) {
+                                        getOpReturn( txid, timestamp );
+                                });
+                        }
+                }
+                xhttp.open( "GET", "https://blockstream.info/api/block/" + blockhash + "/txids", true );
+                xhttp.send();
+        }
+
+        function passTransactions( blockhash ) {
+                var xhttp = new XMLHttpRequest();
+                xhttp.onreadystatechange = function() {
+                        if (this.readyState == 4 && this.status == 200) {
+                                var meta = JSON.parse( xhttp.responseText );
+                                var timestamp = meta[ "timestamp" ];
+                                var txcount = meta[ "tx_count" ];
+                                adjusted_timestamp = timestamp + 7200;
+                                prepareEntries( blockhash, adjusted_timestamp, txcount );
+                        }
+                }
+                xhttp.open( "GET", "https://blockstream.info/api/block/" + blockhash, true );
+                xhttp.send();
+        }
+
+        function getChaintip() {
+                var xhttp = new XMLHttpRequest();
+                xhttp.onreadystatechange = function() {
+                        if (this.readyState == 4 && this.status == 200) {
+                                var chaintip = xhttp.responseText;
+                                sessionStorage[ "chaintip" ] = chaintip;
+                                setTimeout( function() {getChaintip();}, 30000 );
+                        }
+                }
+                xhttp.open( "GET", "https://blockstream.info/api/blocks/tip/height", true );
+                xhttp.send();
+        }
+
+        function checkHeight( blockheight ) {
+                if ( !sessionStorage[ "chaintip" ] ) {
+                        getChaintip();
+                }
+                if ( !blockheight ) {
+                        blockheight = 0;
+                }
+                if ( blockheight == sessionStorage[ "chaintip" ] ) {
+                        setTimeout( function() {checkHeight( blockheight );}, 60000 );
+                } else {
+                        blockheight = blockheight + 1;
+                        var xhttp = new XMLHttpRequest();
+                        xhttp.onreadystatechange = function() {
+                                if (this.readyState == 4 && this.status == 200) {
+                                        var blockhash = xhttp.responseText;
+                                        passTransactions( blockhash );
+                                        checkHeight( blockheight );
+                                }
+                        }
+                        xhttp.open( "GET", "https://blockstream.info/api/block-height/" + blockheight, true );
+                        xhttp.send();
+                }
+        }
+</script>
+</head>
+<body>
+</body>
+</html>
