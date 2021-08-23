@@ -1,28 +1,100 @@
 <html>
 <!--
 View these functions in action by running a command such as checkHeight( 696611 ) in your console and then watch the results.
-
 TODO
-
-There is an issue with the chaintip which needs to be fixed. It seems to fail to update sometimes when it should update. For example, if I let it get out of date and then run checkHeight with a chaintip that is at a higher blockheight than it, it seems to update the chaintip to the height I ran checkHeight with and then not update anymore even if I rerun checkHeight().
-Write a function called storeEntry() which appends entries to a sigchain database
+Fix the indexOf line. It errors which causes a lot of duplicate entries. The line contains an instruction to ignore entries that are repeats but that instruction is not working so there are repeats.
 Write a function called validateChain() which validates the sigchain created by storeEntry() and alerts the user if it is invalid
 Ensure that getOpReturns() not only checks the blockchain for op_returns but also checks the oracle
-Ensure that makeEntries() not only sorts op_returns alphabetically but also prefixes their timestamps, affixes an ordinal number, and sends the result to storeEntry()
 Ensure that makeEntries() ignores op_returns that don’t match the following format:
-The op_return is 80 bytes (160 characters)
-The op_return’s first character is 0
-The op_return’s 21st character (or 20th counting from 0) is 0
-I was about to say the passTransactions() function should also ignore op_returns where the last 40 bytes are not a valid signature for the key:msg pair in that entry but that is something clients should decide
-Clients should also filter out all but the *earliest* entry containing a signature which is valid for the key:msg pair in that entry -- and in cases where a block contains multiple entries with valid signatures for a given key:msg pair, they should first sort the entries alphabetically and then ignore all entries except the earliest
+- The op_return is 80 bytes (160 characters)
+- The op_return’s first character is 0
+- The op_return’s 21st character (or 20th counting from 0) is 0
+- I was about to say clients should not add op_returns to the sigchain if the last 40 bytes are not a valid signature for the key:msg pair in that entry but they can't do that because they don't know the key, only the keyhash
 -->
 <head>
 <script>
+        function makeChain() {
+                checkHeight();
+                setTimeout( function() {sortEntries();}, 5000 );
+        }
+        function sortEntries( remaining_entries ) {
+                var all_entries = [];
+                if ( !remaining_entries ) {
+                        var unsorted_entries = JSON.parse( document.getElementById( "unsorted entries" ).innerHTML );
+                } else {
+                        var unsorted_entries = remaining_entries;
+                }
+                var onetstamp = [];
+                var othertstamps = [];
+                var fancytstamp = [];
+                unsorted_entries.forEach( function( entry ) {
+                        if ( entry[ "timestamp" ].toString() == unsorted_entries[ 0 ][ "timestamp" ].toString() ) {
+                                onetstamp.push( entry );
+                        } else {
+                                othertstamps.push( entry );
+                        }
+                });
+                onetstamp.sort( function( a, b ) {
+                        if( b[ "datum" ] < a[ "datum" ] ) {
+                                return 1;
+                        }
+                        if( b[ "datum" ] > a[ "datum" ] ) {
+                                return -1;
+                        }
+                        return 0;
+                });
+                onetstamp.forEach( function( entry, index ) {
+                        var fancy_entry = {}
+                        fancy_entry[ "keyhash" ] = entry[ "datum" ].substring( 0, 40 );
+                        fancy_entry[ "msghash" ] = entry[ "datum" ].substring( 40, 80 );
+                        fancy_entry[ "signature" ] = entry[ "datum" ].substring( 80, 160 );
+                        fancy_entry[ "timestamp" ] = entry[ "timestamp" ];
+                        fancy_entry[ "ordinal" ] = index;
+                        fancytstamp.push( fancy_entry );
+                });
+                if ( fancytstamp.length > 0 ) {
+                        var newtstamp = document.createElement( "div" );
+                        newtstamp.id = onetstamp[ 0 ][ "timestamp" ].toString();
+                        newtstamp.className = "alt_tstamps";
+                        newtstamp.style.display = "none";
+                        newtstamp.innerHTML = JSON.stringify( fancytstamp );
+                        document.body.append( newtstamp );
+                }
+                if ( othertstamps.length > 0 ) {
+                        sortEntries( othertstamps );
+                } else {
+                        var i; for ( i=0; i<document.getElementsByClassName( "alt_tstamps" ).length; i++ ) {
+                                var local_entries = JSON.parse( document.getElementsByClassName( "alt_tstamps" )[ i ].innerHTML );
+                                local_entries.forEach( function ( entry ) {
+                                        all_entries.push( entry );
+                                });
+                        }
+                        document.getElementById( "sorted entries" ).innerHTML = JSON.stringify( all_entries );
+                }
+        }
+        function markChecked( entry ) {
+                var checker = JSON.parse( document.getElementById( "checker" ).innerHTML );
+                entry = entry.toString().substring( 0, 160 );
+                checker.push( entry );
+                document.getElementById( "checker" ).innerHTML = JSON.stringify( checker );
+        }
         function makeEntries( op_returns, timestamp ) {
+                var old_entries = JSON.parse( document.getElementById( "unsorted entries" ).innerHTML );
+                var all_entries = [];
+                old_entries.forEach( function( item ) {
+                        all_entries.push( item );
+                });
+                var entries = [];
                 op_returns.sort();
                 op_returns.forEach( function( item ) {
-                        console.log( item + " " + timestamp );
+                        var entry = {}
+                        entry[ "datum" ] = item;
+                        entry[ "timestamp" ] = timestamp;
+                        if ( !( all_entries.indexOf( entry ) > -1 ) ) {
+                                all_entries.push( entry );
+                        }
                 });
+                document.getElementById( "unsorted entries" ).innerHTML = JSON.stringify( all_entries );
         }
 
         function getOpReturn( txid, timestamp ) {
@@ -41,7 +113,7 @@ Clients should also filter out all but the *earliest* entry containing a signatu
                                makeEntries( op_returns, timestamp );
                         }
                 };
-                xhttp.open( "GET", "https://blockstream.info/api/tx/" + txid, true );
+                xhttp.open( "GET", "https://blockstream.info/testnet/api/tx/" + txid, true );
                 xhttp.send();
         }
 
@@ -56,7 +128,7 @@ Clients should also filter out all but the *earliest* entry containing a signatu
                                 });
                         }
                 }
-                xhttp.open( "GET", "https://blockstream.info/api/block/" + blockhash + "/txids", true );
+                xhttp.open( "GET", "https://blockstream.info/testnet/api/block/" + blockhash + "/txids", true );
                 xhttp.send();
         }
 
@@ -71,7 +143,7 @@ Clients should also filter out all but the *earliest* entry containing a signatu
                                 prepareEntries( blockhash, adjusted_timestamp, txcount );
                         }
                 }
-                xhttp.open( "GET", "https://blockstream.info/api/block/" + blockhash, true );
+                xhttp.open( "GET", "https://blockstream.info/testnet/api/block/" + blockhash, true );
                 xhttp.send();
         }
 
@@ -81,19 +153,16 @@ Clients should also filter out all but the *earliest* entry containing a signatu
                         if (this.readyState == 4 && this.status == 200) {
                                 var chaintip = xhttp.responseText;
                                 sessionStorage[ "chaintip" ] = chaintip;
-                                setTimeout( function() {getChaintip();}, 30000 );
                         }
                 }
-                xhttp.open( "GET", "https://blockstream.info/api/blocks/tip/height", true );
+                xhttp.open( "GET", "https://blockstream.info/testnet/api/blocks/tip/height", true );
                 xhttp.send();
         }
 
         function checkHeight( blockheight ) {
-                if ( !sessionStorage[ "chaintip" ] ) {
-                        getChaintip();
-                }
+                getChaintip();
                 if ( !blockheight ) {
-                        blockheight = 0;
+                        blockheight = 2065698;
                 }
                 if ( blockheight == sessionStorage[ "chaintip" ] ) {
                         setTimeout( function() {checkHeight( blockheight );}, 60000 );
@@ -101,18 +170,21 @@ Clients should also filter out all but the *earliest* entry containing a signatu
                         blockheight = blockheight + 1;
                         var xhttp = new XMLHttpRequest();
                         xhttp.onreadystatechange = function() {
-                                if (this.readyState == 4 && this.status == 200) {
-                                        var blockhash = xhttp.responseText;
-                                        passTransactions( blockhash );
-                                        checkHeight( blockheight );
-                                }
+                            if (this.readyState == 4 && this.status == 200) {
+                                var blockhash = xhttp.responseText;
+                                passTransactions( blockhash );
+                                checkHeight( blockheight );
+                            }
                         }
-                        xhttp.open( "GET", "https://blockstream.info/api/block-height/" + blockheight, true );
+                        xhttp.open( "GET", "https://blockstream.info/testnet/api/block-height/" + blockheight, true );
                         xhttp.send();
                 }
         }
 </script>
 </head>
 <body>
+    <div id="checker" style="display: none;">[]</div>
+    <div id="unsorted entries" style="display: none;">[]</div>
+    <div id="sorted entries">[]</div>
 </body>
 </html>
