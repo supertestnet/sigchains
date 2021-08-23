@@ -2,15 +2,6 @@
     <head>
         <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
         <script src="https://bitcoincore.tech/apps/bitcoinjs-ui/lib/bitcoinjs-lib.js"></script>
-        <script>
-            var str = "Hello";
-            var bytes = []; // char codes
-
-            for ( var i = 0; i < str.length; ++i ) {
-              var code = str.charCodeAt( i );
-              bytes = bytes.concat( [ code & 0xff, code / 256 >>> 0 ] );
-            }
-        </script>
         <script src="https://bundle.run/buffer@6.0.3"></script>
         <script>
             var txb = new bitcoinjs.TransactionBuilder( bitcoinjs.networks.testnet );
