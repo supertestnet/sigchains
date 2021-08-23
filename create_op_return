@@ -1,0 +1,35 @@
+<html>
+    <head>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+        <script src="https://bitcoincore.tech/apps/bitcoinjs-ui/lib/bitcoinjs-lib.js"></script>
+        <script>
+            var str = "Hello";
+            var bytes = []; // char codes
+
+            for ( var i = 0; i < str.length; ++i ) {
+              var code = str.charCodeAt( i );
+              bytes = bytes.concat( [ code & 0xff, code / 256 >>> 0 ] );
+            }
+        </script>
+        <script src="https://bundle.run/buffer@6.0.3"></script>
+        <script>
+            var txb = new bitcoinjs.TransactionBuilder( bitcoinjs.networks.testnet );
+            txb.addInput( '2be931057a5c7f324e73dd15fab1b228825caebc1122a760b21402745bad0797', 1 );
+            txb.addOutput( 'mortzsoRcusKthxeYXjuj24VNLA4bxLsuN', 521336 );
+            var data = buffer.Buffer.from( '00fc862b4ecce74626814efc585249e060d369c700e6b279bc6497d433815f84618e5438b6696ee80c7acd2d86ad135e6ee0605a7f78a9f4786b114e1bc79556277acd7d1bd348aea185f8509bae42b5', 'hex' );
+            ret = bitcoinjs.script.compile(
+                [
+                  bitcoinjs.opcodes.OP_RETURN,
+                  data
+                ]
+            )
+            txb.addOutput( ret, 0 )
+            var yourAddressPrivateKeyWIF = '';
+            var yourAddresskeyPair = bitcoinjs.ECPair.fromWIF( yourAddressPrivateKeyWIF, bitcoinjs.networks.testnet );
+            txb.sign( 0, yourAddresskeyPair );
+            console.log( txb.build().toHex() );
+        </script>
+    </head>
+    <body>
+    </body>
+</html>
