@@ -1,15 +1,10 @@
 <html>
 <!--
-View these functions in action by running a command such as checkHeight( 696611 ) in your console and then watch the results.
+View these functions in action by running the command checkHeight() in your console and then watch the results.
 TODO
-Fix the indexOf line. It errors which causes a lot of duplicate entries. The line contains an instruction to ignore entries that are repeats but that instruction is not working so there are repeats.
-Write a function called validateChain() which validates the sigchain created by storeEntry() and alerts the user if it is invalid
 Ensure that getOpReturns() not only checks the blockchain for op_returns but also checks the oracle
-Ensure that makeEntries() ignores op_returns that don’t match the following format:
-- The op_return is 80 bytes (160 characters)
-- The op_return’s first character is 0
-- The op_return’s 21st character (or 20th counting from 0) is 0
-- I was about to say clients should not add op_returns to the sigchain if the last 40 bytes are not a valid signature for the key:msg pair in that entry but they can't do that because they don't know the key, only the keyhash
+I have to figure out how to validate that the oracle has cosigned everything properly. My assumption was that he would enter a sigchain transaction after every non-oracle transaction attesting to the new state. But if clients require that, then what should the oracle do when a block comes in with multiple transactions in it? Perhaps he should insert a transaction in between each one, but then his cooperation is required for each subsequent op_return transaction after the first one in a block. If I don't require his signature on these transactions at all, then his hashes don't really attest to the full chain, only to his part of it. But maybe that's okay. His signature is only supposed to be a fraud proof of what he did on his chain. The real blockchain doesn't need his attestation. So maybe he is only required to "cosign" sigchain transactions, not op_return transactions. Okay, that will be my new assumption.
+Write a function called validateChain() which validates the sigchain created by storeEntry() and alerts the user if it is invalid
 -->
 <head>
 <script>
@@ -72,12 +67,6 @@ Ensure that makeEntries() ignores op_returns that don’t match the following fo
                         document.getElementById( "sorted entries" ).innerHTML = JSON.stringify( all_entries );
                 }
         }
-        function markChecked( entry ) {
-                var checker = JSON.parse( document.getElementById( "checker" ).innerHTML );
-                entry = entry.toString().substring( 0, 160 );
-                checker.push( entry );
-                document.getElementById( "checker" ).innerHTML = JSON.stringify( checker );
-        }
         function makeEntries( op_returns, timestamp ) {
                 var old_entries = JSON.parse( document.getElementById( "unsorted entries" ).innerHTML );
                 var all_entries = [];
@@ -90,9 +79,7 @@ Ensure that makeEntries() ignores op_returns that don’t match the following fo
                         var entry = {}
                         entry[ "datum" ] = item;
                         entry[ "timestamp" ] = timestamp;
-                        if ( !( all_entries.indexOf( entry ) > -1 ) ) {
-                                all_entries.push( entry );
-                        }
+                        all_entries.push( entry );
                 });
                 document.getElementById( "unsorted entries" ).innerHTML = JSON.stringify( all_entries );
         }
@@ -107,7 +94,9 @@ Ensure that makeEntries() ignores op_returns that don’t match the following fo
                                var op_returns = [];
                                outputs.forEach( function( output ) {
                                        if ( output[ "scriptpubkey_type" ] == "op_return" ) {
-                                               op_returns.push( output[ "scriptpubkey_asm" ].split( " " )[ 2 ] );
+                                               if ( output[ "scriptpubkey_asm" ].split( " " )[ 2 ].length == 160 && output[ "scriptpubkey_asm" ].split( " " )[ 2 ].toString().substring( 0, 2 ) == "00" && output[ "scriptpubkey_asm" ].split( " " )[ 2 ].toString().substring( 40, 42 ) == "00" ) {
+                                                       op_returns.push( output[ "scriptpubkey_asm" ].split( " " )[ 2 ] );
+                                               }
                                        }
                                });
                                makeEntries( op_returns, timestamp );
