@@ -1,7 +1,13 @@
 <html>
 <!--
 This document contains the functions the oracle uses to cosign sigchain entries.
+TODO
+- Change the oracle privkey so that it isn't publicly known
+- Get the previous chainhash from a database rather than using the dummy text a1a1a1...a1a1a1
+- Fix the error whereby the oracle can only do 1 transaction per second because it always assumes the current user's ordinal is 0
+- Make this page a python page which produces results only for the oracle if he supplies some password with his query
 To test it, run this function:
+
         cosign( "008c1d966be2657f4200e37a16661e6ebd611f2f00460f94e505eae249b85ab1f43912f2daab6e5e00b4117a094f547f1bd8619bfe21e86d1a4920d66571c131670253fbe1abc2495a6e3bfc14b8e0f9", "04cbbce250681f621ba38a2e14a7900d924dfe98db2b6535f5fd6de5a3b553e30941df812b998d75a3", "f09f0900e1854f1fc3fbfec096a4bd6593d8d77e", "00dcbb6c72ccaca8b7e92d560431b0351f8e856d" );
 
 Note that this is what it looks like with variables instead of values:
@@ -9,6 +15,7 @@ Note that this is what it looks like with variables instead of values:
         cosign( datum, pubkey, privkey, keyhash, first = 1 );
 
 Also note the datum 008c1d...b8e0f9. The first datum in the sigchain was supposed to be 00e6b2...ae42b5 but I realized that I could improve the sigchain by ensuring that the first byte of user-submitted pubkey hashes, message hashes, and signatures are all 00. I also realized that "from: issuance" was a stupid thing to put in the first sigchain transaction since it ought rather to specify the full pubkey of the issuer since that is not something you can ascertain via the sigchain, which only shows the sender's keyhash. So there will be a new "first sigchain transaction" which may be the one shown above. Probably not though because I think I accidentally lost that user's keypair.
+Also note that the oracle's signatures and message hashes do not need to start with 00 because it is already known what sigchain they belong to since the oracle already has a preknown special relationship to the sigchain.
 -->
 <head>
 <script language="JavaScript" type="text/javascript">
