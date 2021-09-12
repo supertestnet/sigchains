@@ -6,6 +6,11 @@ The signature generation function ensures that the r_value and s_value are alway
 The sign message function takes a concatenated string of an r_value and an s_value, parses it, and constructs this:
 "302c0214" + r_value + "0214" + s_value
 Then it checks if the signature is valid and throws an error if it is not.
+Test this software by running this:
+        generateKeys(); generateKeys();
+Then run this:
+        startDatum( frompriv, frompub, fromhash, to, tokenid, amount );
+Fill in frompriv with the first private key you generated, frompub with the first public key you generated, fromhash with a hash of frompub, to with a hash of the second public key you generated, token id with a random identifier such as 9e0782b895fe536b477b1d59c0d3f74e13a49530, and amount with an integer such as 500
 -->
 <head>
 <script language="JavaScript" type="text/javascript">
@@ -172,14 +177,10 @@ code.google.com/p/crypto-js
 code.google.com/p/crypto-js/wiki/License
 */
 /*
-
 (c) 2012 by Cedric Mesnil. All rights reserved.
-
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
     - Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
     - Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-
 THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 (function(){var q=CryptoJS,d=q.lib,n=d.WordArray,p=d.Hasher,d=q.algo,x=n.create([0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,7,4,13,1,10,6,15,3,12,0,9,5,2,14,11,8,3,10,14,4,9,15,8,1,2,7,0,6,13,11,5,12,1,9,11,10,0,8,12,4,13,3,7,15,14,5,6,2,4,0,5,9,7,12,2,10,14,1,3,8,11,6,15,13]),y=n.create([5,14,7,0,9,2,11,4,13,6,15,8,1,10,3,12,6,11,3,7,0,13,5,10,14,15,8,12,4,9,1,2,15,5,1,3,7,14,6,9,11,8,12,2,10,0,4,13,8,6,4,1,3,11,15,0,5,12,2,13,9,7,10,14,12,15,10,4,1,5,8,7,6,2,13,14,0,3,9,11]),z=n.create([11,14,15,12,
@@ -261,17 +262,14 @@ if(typeof KJUR=="undefined"||!KJUR){KJUR={}}if(typeof KJUR.jws=="undefined"||!KJ
 /*
       CryptoMX Tools
       Copyright (C) 2004 - 2006 Derek Buitenhuis
-
       This program is free software; you can redistribute it and/or
       modify it under the terms of the GNU General Public License
       as published by the Free Software Foundation; either version 2
       of the License, or (at your option) any later version.
-
       This program is distributed in the hope that it will be useful,
       but WITHOUT ANY WARRANTY; without even the implied warranty of
       MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
       GNU General Public License for more details.
-
       You should have received a copy of the GNU General Public License
       along with this program; if not, write to the Free Software
       Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
@@ -576,55 +574,92 @@ if(typeof KJUR=="undefined"||!KJUR){KJUR={}}if(typeof KJUR.jws=="undefined"||!KJ
 </script>
 <script language="JavaScript" type="text/javascript">
 
-function generateKeys() {
-    //Curve secp256r1 , secp256k1 , secp384r1
-    var curve = "secp160r1"; 
-    var ec = new KJUR.crypto.ECDSA({"curve": curve});
-    var keypair = ec.generateKeyPairHex();
-    var private_key = keypair.ecprvhex;
-    var public_key = keypair.ecpubhex;
-    var value = public_key;
-    var hash = RMDstring( value );
-    if ( hash.substring( 0, 2 ) == "00" ) {
-        document.write("Private Key : "+private_key+"<br>");
-        document.write("Public Key : "+public_key+"<br>");
-    } else {
-        generateKeys();
-    }
+function signMsg( privkey, msg ) {
+        var curve = "secp160r1";
+        var signature_algo = "RIPEMD160withECDSA";
+        var sig = new KJUR.crypto.Signature({"alg": signature_algo});
+        sig.init({d: privkey, curve: curve});
+        sig.updateString(msg);
+        var sigValueHex = sig.sign();
+        if ( ( sigValueHex.substring( 2, 4 ) == "2c" ) && ( sigValueHex.substring( 8, 10 ) == "00" ) ) {
+                var r_value = sigValueHex.substring( 8, 48 );
+                var s_value = sigValueHex.substring( 52 );
+                var finalsig = r_value + s_value;
+                sessionStorage[ "sig" ] = finalsig;
+        } else {
+                signMsg( privkey, msg );
+        }
 }
 
-function signMsg( privkey, msg ) {
-    var curve = "secp160r1";
-    var signature_algo = "RIPEMD160withECDSA";
-    var sig = new KJUR.crypto.Signature({"alg": signature_algo});
-    sig.init({d: privkey, curve: curve});
-    sig.updateString(msg);
-    var sigValueHex = sig.sign();
-    if ( sigValueHex.substring( 2, 4 ) == "2c" ) {
-        var r_value = sigValueHex.substring( 8, 48 );
-        var s_value = sigValueHex.substring( 52 );
-        var finalsig = r_value + s_value;
-        document.write("Signature : "+finalsig+"<br>");
-    } else {
-        signMsg( privkey, msg );
-    }
+function generateKeys() {
+        //Curve secp256r1 , secp256k1 , secp384r1
+        var curve = "secp160r1"; 
+        var ec = new KJUR.crypto.ECDSA({"curve": curve});
+        var keypair = ec.generateKeyPairHex();
+        var private_key = keypair.ecprvhex;
+        var public_key = keypair.ecpubhex;
+        var value = public_key;
+        var hash = RMDstring( value );
+        if ( hash.substring( 0, 2 ) == "00" ) {
+            document.write("Private Key: "+private_key+"<br>");
+            document.write("Public Key: "+public_key+"<br>");
+            document.write("Hash: "+hash+"<br>");
+        } else {
+            generateKeys();
+        }
+}
+    
+function startDatum( frompriv, frompub, fromhash, to, tokenid, amount ) {
+        var msg = {}
+        var datum = fromhash;
+        var sig = "";
+        msg[ "from" ] = frompub;
+        msg[ "to" ] = to;
+        msg[ "token" ] = tokenid;
+        msg[ "amount" ] = amount;
+        msg[ "nonce" ] = Math.random();
+        var value = JSON.stringify( msg );
+        var hash = RMDstring( value );
+        if ( hash.substring( 0, 2 ) != "00" ) {
+                startDatum( frompriv, frompub, fromhash, to, tokenid, amount );
+        } else {
+                document.write( "datum stage 1: " + datum + "<br>" );
+                document.write( "message: " + value + "<br>" );
+                document.write( "message hash: " + hash + "<br>" );
+                datum += hash;
+                document.write( "datum stage 2: " + datum + "<br>" );
+                signMsg( frompriv, hash );
+                finishDatum( datum, frompub, hash );
+        }
+}
+    
+function finishDatum( datum, frompub, msghash ) {
+        if ( sessionStorage[ "sig" ] ) {
+                document.write( "sig: " + sessionStorage[ "sig" ] + "<br>" );
+                datum += sessionStorage[ "sig" ];
+                document.write( "datum stage 3: " + datum + "<br>" );
+                document.write( 'verifySig( "' + frompub + '", "' + msghash + '", "' + sessionStorage[ "sig" ] + '" );' + '<br>' );
+                verifySig( frompub, msghash, sessionStorage[ "sig" ] );
+        } else {
+                setTimeout( function() {finishDatum( datum );}, 1000 );
+        }
 }
 
 function verifySig( key, msg, rns ) {
-    var curve = "secp160r1";
-    var signature_algo = "RIPEMD160withECDSA";
-    var r_value = rns.substring( 0, 40 );
-    var s_value = rns.substring( 40 );
-    var sigval = "302c0214" + r_value + "0214" + s_value;
-    var sig = new KJUR.crypto.Signature({"alg": signature_algo, "prov": "cryptojs/jsrsa"});
-    sig.init({xy: key, curve: curve});
-    sig.updateString(msg);
-    var result = sig.verify(sigval);
-    if (result) {
-      document.write("Signature : Verified");
-    } else {
-      document.write("Signature : UnVerified");;
-    }
+        var curve = "secp160r1";
+        var signature_algo = "RIPEMD160withECDSA";
+        var r_value = rns.substring( 0, 40 );
+        var s_value = rns.substring( 40 );
+        var sigval = "302c0214" + r_value + "0214" + s_value;
+        var sig = new KJUR.crypto.Signature({"alg": signature_algo, "prov": "cryptojs/jsrsa"});
+        sig.init({xy: key, curve: curve});
+        sig.updateString(msg);
+        var result = sig.verify(sigval);
+        if (result) {
+                document.write("Signature: Verified<br>");
+        } else {
+                document.write("Signature: Unverified<br>");;
+        }
 }
 </script>
 </head>
