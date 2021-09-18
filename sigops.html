@@ -1,18 +1,11 @@
 <html>
 <!--
-This document contains the functions I plan to use to generate keypairs, sign messages, and verify signatures.
-The first function already ensures that the first two characters of the pubkey are 00 which is important for allowing many simultaneous sigchains.
-The signature generation function ensures that the r_value and s_value are always 20 bytes apiece.
-The sign message function takes a concatenated string of an r_value and an s_value, parses it, and constructs this:
-"302c0214" + r_value + "0214" + s_value
-Then it checks if the signature is valid and throws an error if it is not.
-Test this software by running this:
-        generateKeys(); generateKeys();
-Then run this:
-        startDatum( frompriv, frompub, fromhash, to, tokenid, amount );
-Fill in frompriv with the first private key you generated, frompub with the first public key you generated, fromhash with a hash of frompub, to with a hash of the second public key you generated, token id with a random identifier such as 9e0782b895fe536b477b1d59c0d3f74e13a49530, and amount with an integer such as 500
+This document contains a proof of concept sigchain wallet.
 -->
 <head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="https://bitcoincore.tech/apps/bitcoinjs-ui/lib/bitcoinjs-lib.js"></script>
+<script src="https://bundle.run/buffer@6.0.3"></script>
 <script language="JavaScript" type="text/javascript">
 /*
  * jsrsasign(all) 8.0.4 (2017-09-14) (c) 2010-2017 Kenji Urushima | kjur.github.com/jsrsasign/license
@@ -581,7 +574,7 @@ function signMsg( privkey, msg ) {
         sig.init({d: privkey, curve: curve});
         sig.updateString(msg);
         var sigValueHex = sig.sign();
-        if ( ( sigValueHex.substring( 2, 4 ) == "2c" ) && ( sigValueHex.substring( 8, 10 ) == "00" ) ) {
+        if ( ( sigValueHex.substring( 2, 4 ) == "2c" ) && ( sigValueHex.substring( 8, 10 ) != "00" ) ) {
                 var r_value = sigValueHex.substring( 8, 48 );
                 var s_value = sigValueHex.substring( 52 );
                 var finalsig = r_value + s_value;
@@ -591,25 +584,49 @@ function signMsg( privkey, msg ) {
         }
 }
 
-function generateKeys() {
-        //Curve secp256r1 , secp256k1 , secp384r1
+function testKeys() {
+        var curve = "secp160r1"; 
+        var ec = new KJUR.crypto.ECDSA({"curve": curve});
+        ec.generateKeyPairTest=function(){var k=ec.ecparams.n;var n=ec.getBigRandom(k);var l=ec.ecparams.G.multiply(n);var q=l.getX().toBigInteger();var o=l.getY().toBigInteger();var i=ec.ecparams.keylen/4;var m=("0000000000"+n.toString(16)).slice(-i);var r=("0000000000"+q.toString(16)).slice(-i);var p=("0000000000"+o.toString(16)).slice(-i);var j="04"+r+p;ec.setPrivateKeyHex(m);ec.setPublicKeyHex(j);return{ecprvhex:m,ecpubhex:j,xcoor:q,ycoor:o,oldn:n};}
+        ec.generateKeyPairFromOld=function( oldx, oldy, oldn, bignum ){var n=oldn.multiply(bignum);var q=oldx.multiply(bignum);var o=oldy.multiply(bignum);var i=ec.ecparams.keylen/4;var m=("0000000000"+n.toString(16)).slice(-i);var r=("0000000000"+q.toString(16)).slice(-i);var p=("0000000000"+o.toString(16)).slice(-i);var j="04"+r+p;ec.setPrivateKeyHex(m);ec.setPublicKeyHex(j);return{ecprvhex:m,ecpubhex:j,xcoor:q,ycoor:o};}
+        var keypair1 = ec.generateKeyPairTest();
+        var keypair2 = ec.generateKeyPairTest();
+        var bignum = ec.getBigRandom( ec.ecparams.n );
+        console.log( "keypair2: ", keypair2 );
+        console.log( bignum );
+        console.log( "keypair1: ", keypair1 );
+        var keypair3 = ec.generateKeyPairFromOld( keypair1.xcoor, keypair1.ycoor, keypair1.oldn, bignum );
+        console.log( "keypair3: ", keypair3 );
+}
+
+function generateKeys( i ) {
         var curve = "secp160r1"; 
         var ec = new KJUR.crypto.ECDSA({"curve": curve});
         var keypair = ec.generateKeyPairHex();
         var private_key = keypair.ecprvhex;
         var public_key = keypair.ecpubhex;
-        var value = public_key;
-        var hash = RMDstring( value );
+        var hash = RMDstring( public_key );
         if ( hash.substring( 0, 2 ) == "00" ) {
-            document.write("Private Key: "+private_key+"<br>");
-            document.write("Public Key: "+public_key+"<br>");
-            document.write("Hash: "+hash+"<br>");
+            var keypair = {}
+            keypair[ "privkey" ] = private_key;
+            keypair[ "pubkey" ] = public_key;
+            keypair[ "keyhash" ] = hash;
+            sessionStorage.removeItem( "key" );
+            if ( i == 0 ) {
+                    sessionStorage.key0 = JSON.stringify( keypair );
+            }
+            if ( i == 2 ) {
+                    sessionStorage.key2 = JSON.stringify( keypair );
+            }
+            if ( i == 3 ) {
+                    sessionStorage.key3 = JSON.stringify( keypair );
+            }
         } else {
-            generateKeys();
+            generateKeys( i );
         }
 }
-    
-function startDatum( frompriv, frompub, fromhash, to, tokenid, amount ) {
+
+function startDatum( frompriv, frompub, fromhash, to, tokenid, amount, image, txtype, tokenname, ticker ) {
         var msg = {}
         var datum = fromhash;
         var sig = "";
@@ -617,29 +634,37 @@ function startDatum( frompriv, frompub, fromhash, to, tokenid, amount ) {
         msg[ "to" ] = to;
         msg[ "token" ] = tokenid;
         msg[ "amount" ] = amount;
+        if ( image && image != "" ) {
+                msg[ "image" ] = image;
+        }
+        msg[ "txtype" ] = txtype;
+        msg[ "tokenname" ] = tokenname;
+        msg[ "ticker" ] = ticker;
         msg[ "nonce" ] = Math.random();
         var value = JSON.stringify( msg );
         var hash = RMDstring( value );
         if ( hash.substring( 0, 2 ) != "00" ) {
-                startDatum( frompriv, frompub, fromhash, to, tokenid, amount );
+                startDatum( frompriv, frompub, fromhash, to, tokenid, amount, image, txtype, tokenname, ticker );
         } else {
-                document.write( "datum stage 1: " + datum + "<br>" );
-                document.write( "message: " + value + "<br>" );
-                document.write( "message hash: " + hash + "<br>" );
+                console.log( "datum stage 1: " + datum + "<br>" );
+                console.log( "message: " + value + "<br>" );
+                sessionStorage.msg = value;
+                console.log( "message hash: " + hash + "<br>" );
                 datum += hash;
-                document.write( "datum stage 2: " + datum + "<br>" );
+                console.log( "datum stage 2: " + datum + "<br>" );
                 signMsg( frompriv, hash );
                 finishDatum( datum, frompub, hash );
         }
 }
-    
+
 function finishDatum( datum, frompub, msghash ) {
         if ( sessionStorage[ "sig" ] ) {
-                document.write( "sig: " + sessionStorage[ "sig" ] + "<br>" );
+                console.log( "sig: " + sessionStorage[ "sig" ] + "<br>" );
                 datum += sessionStorage[ "sig" ];
-                document.write( "datum stage 3: " + datum + "<br>" );
-                document.write( 'verifySig( "' + frompub + '", "' + msghash + '", "' + sessionStorage[ "sig" ] + '" );' + '<br>' );
-                verifySig( frompub, msghash, sessionStorage[ "sig" ] );
+                console.log( "datum stage 3: " + datum + "<br>" );
+                console.log( 'verifySig( "' + frompub + '", "' + msghash + '", "' + sessionStorage[ "sig" ] + '" );' + '<br>' );
+                console.log( verifySig( frompub, msghash, sessionStorage[ "sig" ] ) );
+                sessionStorage.datum = datum;
         } else {
                 setTimeout( function() {finishDatum( datum );}, 1000 );
         }
@@ -656,13 +681,735 @@ function verifySig( key, msg, rns ) {
         sig.updateString(msg);
         var result = sig.verify(sigval);
         if (result) {
-                document.write("Signature: Verified<br>");
+                return "Signature: Verified";
         } else {
-                document.write("Signature: Unverified<br>");;
+                return "Signature: Unverified";
         }
 }
+var sha256 = function sha256(ascii) {
+    function rightRotate(value, amount) {
+        return (value>>>amount) | (value<<(32 - amount));
+    };
+    
+    var mathPow = Math.pow;
+    var maxWord = mathPow(2, 32);
+    var lengthProperty = 'length'
+    var i, j; // Used as a counter across the whole file
+    var result = ''
+
+    var words = [];
+    var asciiBitLength = ascii[lengthProperty]*8;
+    
+    //* caching results is optional - remove/add slash from front of this line to toggle
+    // Initial hash value: first 32 bits of the fractional parts of the square roots of the first 8 primes
+    // (we actually calculate the first 64, but extra values are just ignored)
+    var hash = sha256.h = sha256.h || [];
+    // Round constants: first 32 bits of the fractional parts of the cube roots of the first 64 primes
+    var k = sha256.k = sha256.k || [];
+    var primeCounter = k[lengthProperty];
+    /*/
+    var hash = [], k = [];
+    var primeCounter = 0;
+    //*/
+
+    var isComposite = {};
+    for (var candidate = 2; primeCounter < 64; candidate++) {
+        if (!isComposite[candidate]) {
+            for (i = 0; i < 313; i += candidate) {
+                isComposite[i] = candidate;
+            }
+            hash[primeCounter] = (mathPow(candidate, .5)*maxWord)|0;
+            k[primeCounter++] = (mathPow(candidate, 1/3)*maxWord)|0;
+        }
+    }
+    
+    ascii += '\x80' // Append Ƈ' bit (plus zero padding)
+    while (ascii[lengthProperty]%64 - 56) ascii += '\x00' // More zero padding
+    for (i = 0; i < ascii[lengthProperty]; i++) {
+        j = ascii.charCodeAt(i);
+        if (j>>8) return; // ASCII check: only accept characters in range 0-255
+        words[i>>2] |= j << ((3 - i)%4)*8;
+    }
+    words[words[lengthProperty]] = ((asciiBitLength/maxWord)|0);
+    words[words[lengthProperty]] = (asciiBitLength)
+    
+    // process each chunk
+    for (j = 0; j < words[lengthProperty];) {
+        var w = words.slice(j, j += 16); // The message is expanded into 64 words as part of the iteration
+        var oldHash = hash;
+        // This is now the undefinedworking hash", often labelled as variables a...g
+        // (we have to truncate as well, otherwise extra entries at the end accumulate
+        hash = hash.slice(0, 8);
+        
+        for (i = 0; i < 64; i++) {
+            var i2 = i + j;
+            // Expand the message into 64 words
+            // Used below if 
+            var w15 = w[i - 15], w2 = w[i - 2];
+
+            // Iterate
+            var a = hash[0], e = hash[4];
+            var temp1 = hash[7]
+                + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) // S1
+                + ((e&hash[5])^((~e)&hash[6])) // ch
+                + k[i]
+                // Expand the message schedule if needed
+                + (w[i] = (i < 16) ? w[i] : (
+                        w[i - 16]
+                        + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15>>>3)) // s0
+                        + w[i - 7]
+                        + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2>>>10)) // s1
+                    )|0
+                );
+            // This is only used once, so *could* be moved below, but it only saves 4 bytes and makes things unreadble
+            var temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) // S0
+                + ((a&hash[1])^(a&hash[2])^(hash[1]&hash[2])); // maj
+            
+            hash = [(temp1 + temp2)|0].concat(hash); // We don't bother trimming off the extra ones, they're harmless as long as we're truncating when we do the slice()
+            hash[4] = (hash[4] + temp1)|0;
+        }
+        
+        for (i = 0; i < 8; i++) {
+            hash[i] = (hash[i] + oldHash[i])|0;
+        }
+    }
+    
+    for (i = 0; i < 8; i++) {
+        for (j = 3; j + 1; j--) {
+            var b = (hash[i]>>(j*8))&255;
+            result += ((b < 16) ? 0 : '') + b.toString(16);
+        }
+    }
+    return result;
+};
+    function makeHash() {
+            str1 = Math.random() * 10000000000000000;
+            str2 = Math.random() * 10000000000000000;
+            str3 = Math.random() * 10000000000000000;
+            str4 = Math.random() * 10000000000000000;
+            str5 = Math.random() * 10000000000000000;
+            str6 = Math.random() * 10000000000000000;
+            str7 = Math.random() * 10000000000000000;
+            str8 = Math.random() * 10000000000000000;
+            var concat = str1.toString() + str2.toString() + str3.toString() + str4.toString() + str5.toString() + str6.toString() + str7.toString() + str8.toString();
+            return sha256( concat );
+    }
+    function encodeBase64( elm ) {
+            var file = elm.files[ 0 ];
+            var imgReader = new FileReader();
+            imgReader.onloadend = function() {
+                    document.getElementsByName( 'image' )[ 0 ].value = imgReader.result.toString();
+            }
+            imgReader.readAsDataURL( file );
+    }
 </script>
 </head>
 <body>
+        <div id="wallet title" style="text-align: center;">Sigchain wallet</div>
+        <br>
+        <div id="wallet" style="border: 1px solid black; border-radius: 10px; width: 100%; max-width: 400px; margin: auto; position: relative;">
+                <div style="text-align: center;">
+                        <br>
+                        <select id="token list" style="display: none; position: absolute; right: 10px; max-width: 100px;">
+                                <option>--- Tokens ---</option>
+                        </select>
+                        <div id="balance title">
+                                Balance
+                        </div>
+                        <div id="balance">
+                                <span id="balance amount">0.00</span> <span id="balance type"></span>
+                        </div>
+                        <br>
+                        <button id="issue">
+                                Issue tokens
+                        </button>
+                        <button id="send">
+                                Send tokens
+                        </button>
+                        <button id="token import">
+                                Import tokens
+                        </button>
+                        <br>
+                        <br>
+                        <div id="keyhashtitle">
+                                Your address
+                        </div>
+                        <div id="keyhash">
+                        </div>
+                        <br>
+                </div>
+        </div>
+        <div id="tx maker" style="border: 1px solid black; border-radius: 10px; width: 100%; max-width: 400px; margin: auto; display: none;">
+                <div style="text-align: center;">
+                        <br>
+                        <form>
+                                <p style="font-weight: bold;">To</p>
+                                <p><input type="text" name="to"></p>
+                                <p style="font-weight: bold;">From</p>
+                                <p><input type="text" name="from"></p>
+                                <p style="font-weight: bold;">Token</p>
+                                <p><input type="text" name="token"></p>
+                                <p style="font-weight: bold;">Token name</p>
+                                <p><input type="text" name="tokenname"></p>
+                                <p style="font-weight: bold;">Ticker</p>
+                                <p><input type="text" name="ticker"></p>
+                                <p style="font-weight: bold;">Amount</p>
+                                <p><input type="text" name="amount"></p>
+                                <p style="font-weight: bold;">Image (optional)</p>
+                                <p><input type="file" onchange="if ( this.files[ 0 ].size < 5000 ) {encodeBase64( this );} else {alert( 'File too large, make sure it is less than 5 kilobytes' ); this.value = null;}" /></p>
+                                <p><input type="hidden" name="image"></p>
+                                <br>
+                                <button type="button" id="create tx">
+                                        Create transaction
+                                </button>
+                        </form>
+                </div>
+        </div>
+        <div id="send tx maker" style="border: 1px solid black; border-radius: 10px; width: 100%; max-width: 400px; margin: auto; display: none;">
+                <div style="text-align: center;">
+                        <br>
+                        <form>
+                                <p style="font-weight: bold;">To</p>
+                                <p><input type="text" name="to"></p>
+                                <p style="font-weight: bold;">From</p>
+                                <p><input type="text" name="from"></p>
+                                <p style="font-weight: bold;">Token</p>
+                                <p>
+                                        <select id="token list 2" style="max-width: 100px;">
+                                                <option>--- Tokens ---</option>
+                                        </select>
+                                </p>
+                                <p style="font-weight: bold;">Amount</p>
+                                <p><input type="text" name="amount"></p>
+                                <br>
+                                <button type="button" id="create send tx">
+                                        Create transaction
+                                </button>
+                        </form>
+                </div>
+        </div>
+        <div id="token importer" style="border: 1px solid black; border-radius: 10px; width: 100%; max-width: 400px; margin: auto; display: none;">
+                <div style="text-align: center;">
+                        <br>
+                        <form>
+                                <p style="font-weight: bold;">Insert transaction text</p>
+                                <p><textarea name="transaction text" rows="5" cols="40"></textarea></p>
+                                <button type="button" id="do the token import">
+                                        Import
+                                </button>
+                        </form>
+                </div>
+        </div>
+        <div id="manual stuff" style="border: 1px solid black; border-radius: 10px; width: 100%; max-width: 400px; margin: auto; display: none;">
+                <div style="text-align: center;">
+                        <br>
+                        These things are supposed to be done automatically but right now they need to be done manually
+                        <br>
+                        <form>
+                                <p style="font-weight: bold;">Insert signature</p>
+                                <p><input type="text" name="tx sig"></p>
+                                <p style="font-weight: bold;">Ensure the following address is a valid issuer of this token</p>
+                                <p><input type="text" name="issuer address" disabled></p>
+                                <p style="font-weight: bold;">Did you check that the issuer or sender never used the above address before?</p>
+                                <p><input type="text" name="address reuse" value="Yes" disabled></p>
+                                <br>
+                                <button type="button" id="confirm token import">
+                                        Confirm
+                                </button>
+                        </form>
+                </div>
+        </div>
+        <div id="datum container" style="border: 1px solid black; border-radius: 10px; width: 100%; max-width: 400px; margin: auto; display: none;">
+                <div style="text-align: center;">
+                        <br>
+                        <div id="tx title" style="font-weight: bold;">
+                                Your transaction (send this text to the recipient)
+                        </div>
+                        <div id="tx" style="word-break: break-all; margin: 10px; border: 1px solid black; padding: 3px;">
+                        </div>
+                        <br>
+                        <div id="datum title" style="font-weight: bold; display: none;">
+                                Datum
+                        </div>
+                        <div id="commitment instructions" style="font-weight: bold;">
+                                But first, commit to it on bitcoin's blockchain
+                        </div>
+                        <br>
+                        <div id="datum" style="word-break: break-all; display: none;">
+                        </div>
+                        <button type="button" id="commit bitcoin">
+                                Commit via base layer transaction
+                        </button>
+                        <br>
+                        <br>
+                        <button type="button" id="commit oracle">
+                                Commit via lightning transaction
+                        </button>
+                        <br>
+                        <br>
+                        <div id="commitment education">
+                                Lightning is faster and cheaper but you have to temporarily trust an oracle. The oracle commits a batch of transactions to bitcoin's blockchain every 2000 transactions. The base layer option is for people who don't want to use the oracle. The base layer is slower and more expensive (it takes at least 2 hours) but can't be censored. One option is to try the fast/cheap way and then redo it later if you get censored.
+                        </div>
+                        <br>
+                </div>
+        </div>
+        <div id="broadcast confirmator" style="border: 1px solid black; border-radius: 10px; width: 100%; max-width: 400px; margin: auto; display: none;">
+                <div style="text-align: center;">
+                        <br>
+                        <div id="txid title" style="font-weight: bold;">
+                                The transaction id of your commitment on bitcoin's blockchain
+                        </div>
+                        <div id="txid" style="word-break: break-all; margin: 10px; border: 1px solid black; padding: 3px;">
+                        </div>
+                        <br>
+                        <button type="button" id="explorer" onclick="window.location.href = 'https://blockstream.info/testnet/tx/' + document.getElementById( 'txid' ).innerHTML">
+                                View on block explorer
+                        </button>
+                        <br>
+                        <br>
+                </div>
+        </div>
+        <script>
+                function makeKeys() {
+                        if ( !localStorage.receivekeys ) {
+                                generateKeys( 0 );
+                                setReceiveKey();
+                        } else {
+                                document.getElementById( "keyhash" ).innerHTML = JSON.parse( localStorage.receivekeys )[ JSON.parse( localStorage.receivekeys ).length - 1 ][ "keyhash" ];
+                        }
+                        if ( !localStorage.issuekeys ) {
+                                generateKeys( 2 );
+                                setIssueKey();
+                        }
+                        if ( !localStorage.changekeys ) {
+                                generateKeys( 3 );
+                                setChangeKey();
+                        }
+                }
+                function setReceiveKey() {
+                        if ( sessionStorage.key0 ) {
+                                addReceiveKey( sessionStorage.key0 );
+                                sessionStorage.removeItem( "key0" );
+                        } else {
+                                setTimeout( function() {setReceiveKey();}, 500 );
+                        }
+                        document.getElementById( "keyhash" ).innerHTML = JSON.parse( localStorage.receivekeys )[ JSON.parse( localStorage.receivekeys ).length - 1 ][ "keyhash" ];
+                }
+                function setIssueKey() {
+                        if ( sessionStorage.key2 ) {
+                                localStorage.removeItem( "issuekeys" );
+                                addIssueKey( sessionStorage.key2 );
+                                sessionStorage.removeItem( "key2" );
+                        } else {
+                                setTimeout( function() {setIssueKey();}, 500 );
+                        }
+                }
+                function setChangeKey() {
+                        if ( sessionStorage.key3 ) {
+                                addChangeKey( sessionStorage.key3 );
+                                sessionStorage.removeItem( "key3" );
+                        } else {
+                                setTimeout( function() {setChangeKey();}, 500 );
+                        }
+                }
+                makeKeys();
+                document.getElementById( "issue" ).addEventListener( "click", function() {
+                        sessionStorage.send = false;
+                        document.getElementById( "wallet" ).style.display = "none";
+                        document.getElementById( "tx maker" ).style.display = "block";
+                        document.getElementsByName( "from" )[ 0 ].value = JSON.parse( localStorage.issuekeys )[ 0 ][ "pubkey" ];
+                        document.getElementsByName( "to" )[ 0 ].value = JSON.parse( localStorage.changekeys )[ JSON.parse( localStorage.changekeys ).length - 1 ][ "keyhash" ];
+                        document.getElementsByName( "token" )[ 0 ].value = makeHash();
+                });
+                document.getElementById( "send" ).addEventListener( "click", function() {
+                        sessionStorage.send = true;
+                        document.getElementById( "wallet" ).style.display = "none";
+                        document.getElementById( "send tx maker" ).style.display = "block";
+                });
+                document.getElementById( "token import" ).addEventListener( "click", function() {
+                        document.getElementById( "wallet" ).style.display = "none";
+                        document.getElementById( "token importer" ).style.display = "block";
+                });
+                document.getElementById( "create tx" ).addEventListener( "click", function() {
+                        document.getElementById( "tx maker" ).style.display = "none";
+                        var to = document.getElementsByName( "to" )[ 0 ].value;
+                        var from = document.getElementsByName( "from" )[ 0 ].value;
+                        var token = document.getElementsByName( "token" )[ 0 ].value;
+                        var amount = document.getElementsByName( "amount" )[ 0 ].value;
+                        var image = document.getElementsByName( "image" )[ 0 ].value;
+                        var txtype = "issuance";
+                        var tokenname = document.getElementsByName( "tokenname" )[ 0 ].value;
+                        var ticker = document.getElementsByName( "ticker" )[ 0 ].value;
+                        startDatum( JSON.parse( localStorage.issuekeys )[ 0 ][ "privkey" ], from, JSON.parse( localStorage.issuekeys )[ 0 ][ "keyhash" ], to, token, amount, image, txtype, tokenname, ticker );
+                        showDatum();
+                        if ( sessionStorage.send == "false" ) {
+                                generateKeys( 2 );
+                                setIssueKey();
+                        }
+                });
+                document.getElementById( "create send tx" ).addEventListener( "click", function() {
+                        var pubkey = document.getElementsByName( "from" )[ 1 ].value;
+                        var privkey = getPrivkeyByPubkey( pubkey );
+                        document.getElementById( "send tx maker" ).style.display = "none";
+                        var to = document.getElementsByName( "to" )[ 1 ].value;
+                        var from = document.getElementsByName( "from" )[ 1 ].value;
+                        var token = sessionStorage.tokenBeingSent;
+                        var amount = document.getElementsByName( "amount" )[ 1 ].value;
+                        var txtype = "send";
+                        startDatum( JSON.parse( localStorage.sendkeys )[ 0 ][ "privkey" ], from, JSON.parse( localStorage.sendkeys )[ 0 ][ "keyhash" ], to, token, amount, "", txtype );
+                        showDatum();
+                        if ( sessionStorage.send == "true" ) {
+                                changeAmount( sessionStorage.tokenBeingSent, amount );
+                                removeSendkey( privkey );
+                        }
+                });
+                function getTokenIdFromTokenName( tokenname ) {
+                        var transactions = JSON.parse( localStorage.transactions );
+                        var i; for ( i=0; i<transactions.length; i++ ) {
+                                if ( transactions[ i ][ "tokenname" ] == tokenname ) {
+                                        return transactions[ i ][ "token" ];
+                                }
+                        }
+                }
+                function getPrivkeyByPubkey( pubkey ) {
+                        var sendkeys = JSON.parse( localStorage.sendkeys );
+                        var i; for ( i=0; i<sendkeys.length; i++ ) {
+                                if ( sendkeys[ i ][ "pubkey" ] == pubkey ) {
+                                        return sendkeys[ i ][ "privkey" ];
+                                }
+                        }
+                }
+                function removeSendkey( privkey ) {
+                        var sendkeys = JSON.parse( localStorage.sendkeys );
+                        var i; for ( i=0; i<sendkeys.length; i++ ) {
+                                if ( sendkeys[ i ][ "privkey" ] == privkey ) {
+                                        sendkeys.splice( i, 1 );
+                                        localStorage.sendkeys = JSON.stringify( sendkeys );
+                                }
+                        }
+                }
+                function showDatum() {
+                        if ( sessionStorage.datum ) {
+                                var transactions = [];
+                                document.getElementById( "datum" ).innerHTML = sessionStorage.datum;
+                                var thistx = JSON.parse( sessionStorage.msg );
+                                if ( sessionStorage.send == "true" ) {
+                                        var priortxs = getAllPriorTransactions( sessionStorage.tokenBeingSent );
+                                        transactions = priortxs;
+                                }
+                                transactions.push( thistx );
+                                document.getElementById( "tx" ).innerHTML = JSON.stringify( transactions );
+                                document.getElementById( "datum container" ).style.display = "block";
+                        } else {
+                                setTimeout( function() {showDatum();}, 500 );
+                        }
+                }
+                function getAllPriorTransactions( tokenid ) {
+                        var txnsToReturn = [];
+                        if ( localStorage.transactions ) {
+                            var transactions = JSON.parse( localStorage.transactions );
+                        } else {
+                            var transactions = [];
+                        }
+                        transactions.forEach( function( item ) {
+                            if ( item[ "token" ] == tokenid ) {
+                                txnsToReturn.push( item );
+                            }
+                        });
+                        return txnsToReturn;
+                }
+                document.getElementById( "commit bitcoin" ).addEventListener( "click", function() {
+                        commitBTC( sessionStorage.datum );
+                });
+                function commitBTC( datum ) {
+                        var txb = new bitcoinjs.TransactionBuilder( bitcoinjs.networks.testnet );
+                        txb.addInput( '1d48bae18a7373a427986aab26114e3101784328f886b8f8f15c4f00514d9b82', 0 );
+                        txb.addOutput( 'moozymgTX1J4i2YiYcg12bBYegiZL5BCBw', 518886 );
+                        var data = buffer.Buffer.from( datum, 'hex' );
+                        ret = bitcoinjs.script.compile(
+                            [
+                              bitcoinjs.opcodes.OP_RETURN,
+                              data
+                            ]
+                        )
+                        txb.addOutput( ret, 0 )
+                        var yourAddressPrivateKeyWIF = '92RjT2vG3HpxyFxf1WH49vbQ9YM7vtx91PqkvQUfJRdRtSNsz3i';
+                        var yourAddresskeyPair = bitcoinjs.ECPair.fromWIF( yourAddressPrivateKeyWIF, bitcoinjs.networks.testnet );
+                        txb.sign( 0, yourAddresskeyPair );
+                        var rawtx = txb.build().toHex();
+                        pushBTCpmt( rawtx );
+                }
+                function pushBTCpmt( rawtx ) {
+                        var xhttp = new XMLHttpRequest();
+                        xhttp.onreadystatechange = function() {
+                                if ( this.readyState == 4 && ( this.status == 200 || this.status == 201 ) ) {
+                                        document.getElementById( "txid" ).innerHTML = JSON.parse( this.responseText )[ "tx" ][ "hash" ];
+                                        document.getElementById( "broadcast confirmator" ).style.display = "block";
+                                        document.getElementById( "datum container" ).style.display = "none";
+                                }
+                        };
+                        xhttp.open( "POST", "https://api.blockcypher.com/v1/btc/test3/txs/push", true );
+                        xhttp.setRequestHeader( "Content-type", "text/plain" );
+                        xhttp.send( '{"tx":"' + rawtx + '"}' );
+                }
+                document.getElementById( "do the token import" ).addEventListener( "click", function() {
+                        var tx = JSON.parse( document.getElementsByName( "transaction text" )[ 0 ].value );
+                        document.getElementsByName( "issuer address" )[ 0 ].value = RMDstring( tx[ 0 ][ "from" ] );
+                        document.getElementById( "token importer" ).style.display = "none";
+                        document.getElementById( "manual stuff" ).style.display = "block";
+                });
+                document.getElementById( "confirm token import" ).addEventListener( "click", function() {
+                        var tx = JSON.parse( document.getElementsByName( "transaction text" )[ 0 ].value );
+                        var frompub = tx[ tx.length - 1 ][ "from" ];
+                        var msghash = RMDstring( JSON.stringify( tx[ tx.length - 1 ] ) );
+                        var sig = document.getElementsByName( "tx sig" )[ 0 ].value;
+                        var verifier = verifySig( frompub, msghash, sig );
+                        if ( verifyReceipt( tx[ tx.length - 1 ][ "to" ] ) && verifier == "Signature: Verified" ) {
+                                if ( isTokenAbsent( tx[ 0 ][ "token" ] ) ) {
+                                        var newtoken1 = document.createElement( "option" );
+                                        newtoken1.innerText = tx[ 0 ][ "tokenname" ];
+                                        newtoken1.title = tx[ 0 ][ "token" ];
+                                        document.getElementById( "token list" ).appendChild( newtoken1 );
+                                        var newtoken2 = document.createElement( "option" );
+                                        newtoken2.innerText = tx[ 0 ][ "tokenname" ];
+                                        newtoken2.title = tx[ 0 ][ "token" ];
+                                        document.getElementById( "token list" ).appendChild( newtoken2 );
+                                        document.getElementById( "token list 2" ).appendChild( newtoken2 );
+                                        document.getElementById( "token list" ).style.display = "block";
+                                        if ( !isRepeatTx( tx[ tx.length - 1 ] ) ) {
+                                                sessionStorage[ "token-" + tx[ 0 ][ "token" ] ] = Number( 0 );
+                                        }
+                                }
+                                if ( !isRepeatTx( tx[ tx.length - 1 ] ) ) {
+                                        var i; for ( i=0; i<tx.length; i++ ) {
+                                                addToken( tx[ i ] );
+                                        }
+                                        sessionStorage[ "token-" + tx[ 0 ][ "token" ] ] = Number( sessionStorage[ "token-" + tx[ 0 ][ "token" ] ] ) + Number( tx[ tx.length - 1 ][ "amount" ] );
+                                        generateKeys( 3 );
+                                        setChangeKey();
+                                } else {
+                                        alert( "Nice try! You already imported that transaction." );
+                                }
+                        } else {
+                                alert( "Import canceled! That transaction does not validly send you any tokens." );
+                        }
+                        document.getElementById( "manual stuff" ).style.display = "none";
+                        document.getElementById( "wallet" ).style.display = "block";
+                });
+                function isTokenAbsent( newtoken ) {
+                        var tokens = [];
+                        var value = true;
+                        var storedStuff = Object.keys( sessionStorage );
+                        storedStuff.forEach( function( item ) {
+                                if ( item.substring( 0, 6 ) == "token-" ) {
+                                        tokens.push( item );
+                                }
+                        });
+                        var i; for ( i=0; i<tokens.length; i++ ) {
+                                if ( tokens[ i ] == "token-" + newtoken ) {
+                                        value = false;
+                                }
+                        }
+                        return value;
+                }
+                document.getElementById( "token list" ).onchange = function() {
+                        var tlist = document.getElementById( "token list" );
+                        var selectedValue = tlist.options[ tlist.selectedIndex ].title;
+                        var selectedValueName = tlist.options[ tlist.selectedIndex ].value;
+                        if ( selectedValueName == "--- Tokens ---" ) {
+                                document.getElementById( "balance amount" ).innerHTML = "[Please select a token]";
+                        } else {
+                                tokenBalance( selectedValue );
+                        }
+                }
+                function tokenBalance( token ) {
+                        var tlist = document.getElementById( "token list" );
+                        var selectedValue = tlist.options[ tlist.selectedIndex ].title;
+                        if ( selectedValue == token ) {
+                                document.getElementById( "balance amount" ).innerHTML = Number( sessionStorage[ "token-" + token ] ).toFixed( 2 );
+                        }
+                }
+                document.getElementById( "token list 2" ).onchange = function() {
+                        var tlist = document.getElementById( "token list 2" );
+                        var selectedValue = tlist.options[ tlist.selectedIndex ].title;
+                        var selectedValueName = tlist.options[ tlist.selectedIndex ].value;
+                        if ( selectedValueName == "--- Tokens ---" ) {
+                                document.getElementsByName( "from" )[ 1 ].value = "Please select a token";
+                        } else {
+                                if ( localStorage.transactions ) {
+                                        var transactions = JSON.parse( localStorage.transactions );
+                                } else {
+                                        var transactions = [];
+                                }
+                                transactions.forEach( function( item ) {
+                                        if ( item[ "token" ] == selectedValue ) {
+                                                document.getElementsByName( "from" )[ 1 ].value = getPubkeyByHash( item[ "to" ] );
+                                                sessionStorage.tokenBeingSent = selectedValue;
+                                        }
+                                });
+                        }
+                }
+                function getPubkeyByHash( keyhash ) {
+                        var sendkeys = JSON.parse( localStorage.sendkeys );
+                        var i; for ( i=0; i<sendkeys.length; i++ ) {
+                                if ( sendkeys[ i ][ "keyhash" ] == keyhash ) {
+                                        return sendkeys[ i ][ "pubkey" ];
+                                }
+                        }
+                }
+                function addToken( tx ) {
+                    var value = false;
+                    if ( !localStorage.transactions ) {
+                            var transactions = [];
+                    } else {
+                            var transactions = JSON.parse( localStorage.transactions );
+                    }
+                    var i; for ( i=0; i<transactions.length; i++ ) {
+                            if ( JSON.stringify( transactions[ i ] ) == JSON.stringify( tx ) ) {
+                                    value = true;
+                            }
+                    }
+                    transactions.push( tx );
+                    if ( value == false ) {
+                            localStorage.transactions = JSON.stringify( transactions );
+                    }
+                }
+                function addReceiveKey( key ) {
+                    key = JSON.parse( key );
+                    if ( !localStorage.receivekeys ) {
+                            var receivekeys = [];
+                    } else {
+                            var receivekeys = JSON.parse( localStorage.receivekeys );
+                    }
+                    receivekeys.push( key );
+                    localStorage.receivekeys = JSON.stringify( receivekeys );
+                }
+                function addChangeKey( key ) {
+                    key = JSON.parse( key );
+                    if ( localStorage.changekeys ) {
+                            var changekeys = JSON.parse( localStorage.changekeys );
+                            var newsendkey = [];
+                            newsendkey.push( changekeys.splice( 0, 1 ) );
+                            newsendkey = newsendkey[ 0 ][ 0 ];
+                            localStorage.removeItem( "changekeys" );
+                            generateKeys( 3 );
+                            setChangeKey();
+                            addSendKey( JSON.stringify( newsendkey ) );
+                    } else {
+                            var changekeys = [];
+                    }
+                    changekeys.push( key );
+                    localStorage.changekeys = JSON.stringify( changekeys );
+                }
+                function addSendKey( key ) {
+                    var value = false;
+                    key = JSON.parse( key );
+                    if ( !localStorage.sendkeys ) {
+                            var sendkeys = [];
+                    } else {
+                            var sendkeys = JSON.parse( localStorage.sendkeys );
+                    }
+                    var i; for ( i=0; i<sendkeys.length; i++ ) {
+                            if ( sendkeys[ i ][ "privkey" ] == key[ "privkey" ] ) {
+                                    value = true;
+                            }
+                    }
+                    sendkeys.push( key );
+                    if ( value == false ) {
+                            localStorage.sendkeys = JSON.stringify( sendkeys );
+                    }
+                }
+                function addIssueKey( key ) {
+                    key = JSON.parse( key );
+                    if ( !localStorage.issuekeys ) {
+                            var issuekeys = [];
+                    } else {
+                            var issuekeys = JSON.parse( localStorage.issuekeys );
+                    }
+                    issuekeys.push( key );
+                    localStorage.issuekeys = JSON.stringify( issuekeys );
+                }
+                function setInitialBalances() {
+                        if ( localStorage.transactions ) {
+                                var transactions = JSON.parse( localStorage.transactions );
+                        } else {
+                                var transactions = [];
+                        }
+                        transactions.forEach( function( item ) {
+                                if ( isTokenAbsent( item[ "token" ] ) && item[ "txtype" ] == "issuance" ) {
+                                        var newtoken1 = document.createElement( "option" );
+                                        newtoken1.innerText = item[ "tokenname" ];
+                                        newtoken1.title = item[ "token" ];
+                                        document.getElementById( "token list" ).appendChild( newtoken1 );
+                                        var newtoken2 = document.createElement( "option" );
+                                        newtoken2.innerText = item[ "tokenname" ];
+                                        newtoken2.title = item[ "token" ];
+                                        document.getElementById( "token list 2" ).appendChild( newtoken2 );
+                                        document.getElementById( "token list" ).style.display = "block";
+                                        sessionStorage[ "token-" + item[ "token" ] ] = Number( item[ "amount" ] );
+                                } else if ( item[ "txtype" ] == "issuance" ) {
+                                        var newtoken1 = document.createElement( "option" );
+                                        newtoken1.innerText = item[ "tokenname" ];
+                                        newtoken1.title = item[ "token" ];
+                                        document.getElementById( "token list" ).appendChild( newtoken1 );
+                                        var newtoken2 = document.createElement( "option" );
+                                        newtoken2.innerText = item[ "tokenname" ];
+                                        newtoken2.title = item[ "token" ];
+                                        document.getElementById( "token list 2" ).appendChild( newtoken2 );
+                                        document.getElementById( "token list" ).style.display = "block";
+                                }
+                        });
+                }
+                setInitialBalances();
+                function isRepeatTx( tx ) {
+                        var value = false;
+                        if ( localStorage.transactions ) {
+                                var transactions = JSON.parse( localStorage.transactions );
+                        } else {
+                                var transactions = [];
+                        }
+                        var i; for ( i=0; i<transactions.length; i++ ) {
+                                if ( JSON.stringify( transactions[ i ] ) == JSON.stringify( tx ) ) {
+                                        value = true;
+                                }
+                        }
+                        return value;
+                }
+                function changeAmount( token, amount ) {
+                        console.log( token );
+                        console.log( amount );
+                        console.log( sessionStorage[ "token-" + token ] );
+                        console.log( sessionStorage[ "token-" + token ] - amount );
+                        sessionStorage[ "token-" + token ] = sessionStorage[ "token-" + token ] - amount;
+                }
+                function verifyReceipt( to ) {
+                        var value = false;
+                        var receivekeys = JSON.parse( localStorage.receivekeys );
+                        var changekeys = JSON.parse( localStorage.changekeys );
+                        var i; for ( i=0; i<receivekeys.length; i++ ) {
+                                if ( to == receivekeys[ i ][ "keyhash" ] ) {
+                                        var newsendkey = [];
+                                        newsendkey.push( receivekeys.splice( i, 1 ) );
+                                        newsendkey = newsendkey[ 0 ][ 0 ];
+                                        generateKeys( 0 );
+                                        setReceiveKey();
+                                        addSendKey( JSON.stringify( newsendkey ) );
+                                        value = true;
+                                }
+                        }
+                        var i; for ( i=0; i<changekeys.length; i++ ) {
+                                if ( to == changekeys[ i ][ "keyhash" ] ) {
+                                        var newsendkey = [];
+                                        newsendkey.push( changekeys.splice( i, 1 ) );
+                                        newsendkey = newsendkey[ 0 ][ 0 ];
+                                        generateKeys( 3 );
+                                        setChangeKey();
+                                        addSendKey( JSON.stringify( newsendkey ) );
+                                        value = true;
+                                }
+                        }
+                        return value;
+                }
+        </script>
 </body>
 </html>
