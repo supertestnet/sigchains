@@ -5,6 +5,8 @@ A sigchain is a chain of timestamped signatures. It can be used to issue and tra
 
 Tokens can be issued and transferred on sigchains in one of two ways: a fully censorship resistant way that is slow and expensive and a mostly censorship resistant way that is fast and cheap. The fully censorship resistant way is similar to omni and counterparty (it's also no faster or cheaper than a bitcoin transaction on the base layer) except it inherits some things from RGB, namely, client side validation and better privacy due to not disclosing the full transaction to anyone but the recipient. The second way, however, is about as fast and cheap as lightning, and is also *mostly* censorship resistant, but you briefly have to put some trust in an oracle. You can override him later if he does censor you by redoing your transaction the first way.
 
+#Video demo (sorry for the poor audio)
+
 [![](https://i.ibb.co/Ksb8Mdh/Screenshot-20210921-002930.png)](https://youtube.com/watch?v=cxkOxIdw_38)
 
 # Long version
